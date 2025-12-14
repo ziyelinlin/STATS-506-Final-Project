@@ -4,13 +4,13 @@ editor: visual
 ---
 
 \begin{center}
-\large \textbf{An Analysis of Educational Attainment and Subjective Well-Being} \\ [0.75em]
+\large \textbf{An Analysis of Educational Attainment and Subjective Well-Being} \footnote{\url{https://github.com/ziyelinlin/STATS-506-Final-Project.git}} \\ [0.75em]
 \normalsize Lindsey Lin
 \end{center}
 
 ## I. Introduction
 
-Education is often assumed to improve subjective well-being through better jobs, higher earnings, and greater life opportunities. However, empirical evidence on whether education directly increases happiness remains mixed. Using recent waves of the General Social Survey (GSS), this report examines whether educational attainment is associated with the probability of reporting being “very happy” in GSS survey question regarding general happiness, both descriptively and after adjusting for demographic and attitudinal factors.
+Education is often assumed to improve subjective well-being through better jobs, higher earnings, and greater life opportunities. Using recent waves of the General Social Survey (GSS), this report examines whether educational attainment is associated with the probability of reporting being “very happy” in GSS survey question regarding general happiness, both descriptively and after adjusting for demographic and attitudinal factors.
 
 ## II. Data & Methods
 
@@ -101,6 +101,24 @@ gss_all_1 <- gss_all %>%
 
 ```{r}
 #| echo: false
+
+#' Compute item-specific proportions by education group
+#'
+#' For a given binary indicator variable (`item`), this function removes missing
+#' values for that item only, then computes the proportion (mean) and sample size
+#' within each education category (`degree5`).
+#'
+#' @param df A data frame containing `degree5` and the variable named in `item`.
+#' @param item A character string giving the column name of a (typically logical or 0/1) indicator variable.
+#'
+#' @return A tibble with one row per `degree5`, containing:
+#' \describe{
+#'   \item{degree5}{Education category.}
+#'   \item{prop}{Mean of the indicator variable within the group.}
+#'   \item{n}{Number of non-missing observations used for that item.}
+#'   \item{item}{The input `item` name (for tracking after binding results).}
+#' }
+#'
 compute_prop <- function(df, item) {
   df %>%
     filter(!is.na(.data[[item]])) %>%      # item-specific missing removal
@@ -231,13 +249,13 @@ names <- c(
 modelsummary(
   model_list,
   exponentiate = TRUE,
-  coef_map     = names,
-  statistic    = "({p.value})",
-  fmt          = 3,
-  stars        = TRUE,
-  gof_omit     = "AIC|BIC|Log.Lik",
-  title        = "Regression Model Results",          
-  output       = "latex"
+  coef_map = names,
+  statistic = "({p.value})",
+  fmt = 3,
+  stars = TRUE,
+  gof_omit = "AIC|BIC|Log.Lik",
+  title = "Regression Model Results",          
+  output = "latex"
 )
 ```
 
