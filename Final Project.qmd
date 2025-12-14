@@ -1,0 +1,254 @@
+---
+format: pdf
+editor: visual
+---
+
+\begin{center}
+\large \textbf{An Analysis of Educational Attainment and Subjective Well-Being} \\ [0.75em]
+\normalsize Lindsey Lin
+\end{center}
+
+## I. Introduction
+
+Education is often assumed to improve subjective well-being through better jobs, higher earnings, and greater life opportunities. However, empirical evidence on whether education directly increases happiness remains mixed. Using recent waves of the General Social Survey (GSS), this report examines whether educational attainment is associated with the probability of reporting being “very happy” in GSS survey question regarding general happiness, both descriptively and after adjusting for demographic and attitudinal factors.
+
+## II. Data & Methods
+
+This analysis combined four GSS datasets (2018, 2021, 2022, 2024) and restricted the sample to respondents with valid survey weights and a non-missing education measure (N = 13,207). Education was coded into five categories: less than high school, high school, associate degree, bachelor’s degree, and graduate degree. Following GSS coding, binary indicators were created for “very happy,” “very satisfied with marriage,” “very satisfied with job,” “pretty well satisfied with finances situation,” and “life is exciting.”
+
+To summarize the social-psychological profile of each education group, item-specific proportions were computed, with missing responses removed separately for each variable. Since the well-being items appear in different years and survey modules, the number of respondents varies across items, and the corresponding sample size ranges were reported as well.
+
+The inferential analysis employed survey-weighted logistic regression, incorporating the GSS sampling design through vpsu, vstrat, and wtssnrps. Three nested models was estimated. The baseline model included only educational attainment, the second model introduced demographic controls, and the full model added financial satisfaction, job satisfaction, life excitement, and year fixed effects. Because these additional attitudinal items are not present in every survey module, the full specification is estimated on the subset of respondents with complete information on all predictors (N = 5,690).
+
+## III. Results
+
+Table 1 shows the proportion of respondents giving positive evaluations within each education group. Across most well-being items, differences by education are relatively small. For instance, the share reporting being “very happy” increases only modestly from .200 among high school graduates to .252 among those with graduate degrees, and similar mild gradients appear for marriage happiness. In contrast, financial satisfaction exhibits a noticeably larger difference. The proportion of pretty well satisfied rises from .165 among those with less than a high school degree to .446 among respondents with graduate degrees, an increase of nearly 30%. Job satisfaction and perceived life excitement also show moderately increasing patterns across education levels, though these changes are less pronounced than those observed for financial satisfaction.
+
+For attitudinal items such as government spending on education (NATEDUC), respondents with less than a high school education are less likely to say the government spends “too little,” while higher-educated groups express this view more frequently. But these attitudinal differences do not follow a simple monotonic pattern, suggesting that education is not uniformly associated with stronger or weaker policy preferences. Overall, the descriptive results point to weak and sometimes non-linear relationships between education and well-being, motivating the need for regression models that adjust for demographic and attitudinal factors.
+
+```{r}
+#| include: false
+library(haven)
+library(tidyverse)
+library(survey)  
+library(purrr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(modelsummary)
+options(modelsummary_factory_latex = "kableExtra",
+        modelsummary_format_numeric_latex = "plain")
+```
+
+```{r}
+#| include: false
+vars <- c("degree", "age", "race", "marital", 
+          "happy", "hapmar", "satjob", "richwork", 
+          "satfin", "life", "coneduc", "nateduc", 
+          "wtssnrps", "vpsu", "vstrat")
+
+keep_gss_vars <- function(dat) {
+  dat %>% select(all_of(vars))
+}
+
+data_2018 <- read_dta("GSS2018.dta")
+data_2021 <- read_dta("GSS2021.dta")
+data_2022 <- read_dta("GSS2022.dta")
+data_2024 <- read_dta("GSS2024.dta")
+```
+
+```{r}
+#| include: false
+gss_all <- list(`2018` = data_2018,
+                `2021` = data_2021,
+                `2022` = data_2022,
+                `2024` = data_2024) %>%
+  imap(~ keep_gss_vars(.x) %>% mutate(year = as.integer(.y))) %>%
+  bind_rows()
+```
+
+```{r}
+#| include: false
+gss_all_1 <- gss_all %>%
+  filter(!is.na(degree)) %>% 
+  mutate(race3 = factor(race, 
+                        levels = c(1, 2, 3),
+                        labels = c("White", "Black", "Other")),
+         degree5 = factor(degree,
+                          levels = 0:4,
+                          labels = c("Less High School", 
+                                     "High School",
+                                     "Associate",
+                                     "Bachelor", 
+                                     "Graduate")),
+         not_married = factor(case_when(marital == 1 ~ 0,
+                                        marital %in% 2:5 ~ 1, 
+                                        TRUE ~ NA_real_),
+                              levels = c(0, 1),
+                              labels = c("Married", "Not married")),
+         happy_very = happy == 1,
+         hapmar_very = hapmar == 1,
+         satjob_very = satjob == 1,
+         satfin_sat = satfin == 1,
+         life_exciting = life == 1,
+         richwork_stay = richwork == 1,
+         coneduc_great = coneduc == 1,
+         nateduc_toolittle = nateduc == 1,
+         nateduc_aboutright = nateduc == 2
+  )
+
+```
+
+```{r}
+#| echo: false
+compute_prop <- function(df, item) {
+  df %>%
+    filter(!is.na(.data[[item]])) %>%      # item-specific missing removal
+    group_by(degree5) %>%
+    summarise(prop = mean(.data[[item]]), n = n(), .groups = "drop") %>%
+    mutate(item = item)
+}
+
+items <- c("happy_very", 
+           "hapmar_very", 
+           "satjob_very", 
+           "satfin_sat", 
+           "life_exciting", 
+           "richwork_stay",
+           "nateduc_toolittle", 
+           "nateduc_aboutright", 
+           "coneduc_great")
+
+summary_long <- map_dfr(items, ~ compute_prop(gss_all_1, .x))
+
+prop_table <- summary_long %>%
+  select(item, degree5, prop) %>%
+  mutate(cell = sprintf("%.3f", prop)) %>%
+  select(item, degree5, cell) %>%
+  pivot_wider(names_from = degree5, values_from = cell)
+
+item_labels <- c(happy_very = "HAPPY (Very)",
+                 hapmar_very = "HAPMAR (Very)",
+                 satjob_very = "SATJOB (Very)",
+                 satfin_sat = "SATFIN (Sat.)",
+                 life_exciting = "LIFE (Exciting)",
+                 richwork_stay = "RICHWORK (Stay)",
+                 nateduc_toolittle = "NATEDUC (Too little)",
+                 nateduc_aboutright = "NATEDUC (About right)",
+                 coneduc_great = "CONEDUC (Great deal)")
+
+prop_table <- prop_table %>%
+  mutate(Item = recode(item, !!!item_labels)) %>%
+  select(Item, `Less High School`, `High School`, Associate, Bachelor, Graduate)
+
+n_row <- summary_long %>%
+  group_by(degree5) %>%
+  summarise(N = paste0(min(n), "–", max(n)), .groups = "drop") %>%
+  pivot_wider(names_from = degree5, values_from = N) %>%
+  mutate(Item = "N")
+
+final_table <- bind_rows(prop_table, n_row) %>%
+  select(Item, `Less High School`, `High School`,Associate, Bachelor, Graduate)
+
+final_table %>%
+  kable(caption = "Social-psychological evaluations by education level",
+        booktabs = TRUE,
+        align = c("l", rep("c", ncol(final_table) - 1))) %>%
+  kable_styling(full_width = FALSE, position = "center", font_size = 8)
+```
+
+Table 2 presents results from the weighted logistic regression models. In Model 1, education categories show only small, statistically weak differences in the odds of being very happy. After adjusting for age, race, and marital status in Model 2, these differences shrink further, and none of the education coefficients remain statistically significant. Model 3 adds attitudinal and evaluative predictors. In the fully adjusted model, education has no independent association with happiness, but several other variables emerge as strong predictors.
+
+Life excitement is the most powerful predictor, with an odds ratio of 2.759 (p \< 0.001), indicating that respondents who describe their lives as exciting are substantially more likely to report being very happy. Job satisfaction and financial satisfaction also show large positive associations, each substantially increasing the probability of being very happy. Marital status remains important, since respondents who are not married—including those who are widowed, divorced, separated, or never married—have roughly 61% lower odds of reporting being very happy compared to married respondents. Age shows a small but statistically significant negative association with happiness. In addition, respondents surveyed in 2021 report significantly lower levels of happiness than those in other years, a pattern consistent with the widespread disruptions associated with the COVID-19 pandemic and with contemporaneous national trends documented by NORC at the University of Chicago[^1]. Overall, the results indicate that once economic, experiential, and relational factors are accounted for, education contributes little to explaining variation in subjective happiness.
+
+[^1]: NORC, University of Chicago (2023), *Historic Shift in Americans’ Happiness Amid Pandemic*. <https://www.norc.org/content/dam/norc-org/pdfs/Historic%20Shift%20in%20Americans%20Happiness%20Amid%20Pandemic.pdf>
+
+## IV. Conclusion
+
+Across descriptive and regression analyses, the relationship between education and subjective well-being appears modest once other factors are taken into account. Although higher education levels show slightly more favorable evaluations in raw proportions, these differences largely disappear in fully adjusted models that incorporate economic satisfaction, job satisfaction, life excitement, marital status, and year effects. This pattern suggests that education is more likely to influence happiness indirectly by shaping life circumstances, rather than serving as a direct determinant of emotional well-being.
+
+This analysis relies on cross-sectional GSS data, which limits the ability to draw causal conclusions. Education may affect happiness through pathways not fully captured by the available measures or included in the models. In addition, missing data, particularly for attitudinal items such as financial and job satisfaction, reduce the analytic sample in the fully adjusted model and may introduce selection bias. A further limitation concerns measurement consistency across survey waves. Several domains of life satisfaction included in earlier GSS surveys (e.g., satisfaction with friends, family, leisure, local community, personal finances, and occupation) are not available in recent years, restricting the analysis to a narrower set of well-being indicators.
+
+Despite these constraints, the findings align closely with prior research suggesting that the relationship between education and happiness is largely indirect. As noted by psychologists, higher education does not directly cause greater happiness but is correlated with higher income and improved access to meaningful life experiences, which in turn support subjective well-being[^2]. Consistent with this perspective, the present analysis shows that experiential and relational factors such as financial satisfaction, job satisfaction, and life excitement play a far more substantial role in explaining happiness than educational attainment itself.
+
+[^2]: Haederle, M. (2024, January 5). *Does a College Degree Make You Happier?* Colorado News and Culture, MSU Denver. <https://red.msudenver.edu/2024/does-a-college-degree-make-you-happier/>
+
+```{r}
+#| include: false
+gss_svy <- gss_all_1 %>%
+  filter(!is.na(wtssnrps), !is.na(vpsu),!is.na(vstrat))
+
+design <- svydesign(ids = ~ vpsu,
+                    strata = ~ vstrat,
+                    weights = ~ wtssnrps,
+                    data = gss_svy,
+                    nest = TRUE)
+
+# Model 1 - Education only
+model1 <- svyglm(happy_very ~ degree5,
+                 design = design,
+                 family = quasibinomial())
+
+# Model 2 - Education + Demographics
+model2 <- svyglm(happy_very ~ degree5 + age + race3 + not_married,
+                 design = design,
+                 family = quasibinomial())
+
+# Model 3 - Full Model 
+model3 <- svyglm(happy_very ~ degree5 + age + race3 + not_married +
+                   satfin_sat + satjob_very + life_exciting + factor(year),
+                 design = design,
+                 family = quasibinomial())
+
+```
+
+```{r, results='asis'}
+#| echo: false
+#| warning: false
+
+model_list <- list("Model 1: Education only" = model1,
+                   "Model 2: + Demographics" = model2,
+                   "Model 3: Full model" = model3)
+
+names <- c(
+  "(Intercept)" = "Intercept",
+  "degree5High School" = "High school",
+  "degree5Associate" = "Associate",
+  "degree5Bachelor" = "Bachelor",
+  "degree5Graduate" = "Graduate",
+  "age" = "Age",
+  "race3Black" = "Race: Black",
+  "race3Other" = "Race: Other",
+  "not_marriedNot married" = "Not married",
+  "satfin_satTRUE" = "Financially satisfied",
+  "satjob_veryTRUE" = "Very satisfied with job",
+  "life_excitingTRUE" = "Life is exciting",
+  "factor(year)2021" = "Year: 2021",
+  "factor(year)2022" = "Year: 2022",
+  "factor(year)2024" = "Year: 2024"
+)
+
+modelsummary(
+  model_list,
+  exponentiate = TRUE,
+  coef_map     = names,
+  statistic    = "({p.value})",
+  fmt          = 3,
+  stars        = TRUE,
+  gof_omit     = "AIC|BIC|Log.Lik",
+  title        = "Regression Model Results",          
+  output       = "latex"
+)
+```
+
+```{r}
+#| include: false
+nrow(gss_all_1)
+nrow(gss_svy)
+model3$df.null + 1  
+```
+
+```{r}
+#| include: false
+table(gss_svy$race)
+```
